@@ -8,13 +8,11 @@ import (
 
 var (
 	defaultServerConfig = ServerConfig{
-		MaxMsgSize:     defaultMaxMsgSize,
-		SocketBasePath: defaultSocketBasePath,
+		MaxMsgSize: defaultMaxMsgSize,
 	}
 
 	defaultClientConfig = ClientConfig{
-		RetryTimer:     defaultRetryTimer,
-		SocketBasePath: defaultSocketBasePath,
+		RetryTimer: defaultRetryTimer,
 	}
 )
 
