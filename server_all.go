@@ -6,13 +6,24 @@ import (
 	"time"
 )
 
+var (
+	defaultServerConfig = ServerConfig{
+		MaxMsgSize:     defaultMaxMsgSize,
+		SocketBasePath: defaultSocketBasePath,
+	}
+
+	defaultClientConfig = ClientConfig{
+		RetryTimer:     defaultRetryTimer,
+		SocketBasePath: defaultSocketBasePath,
+	}
+)
+
 // StartServer - starts the ipc server.
 //
 // ipcName = is the name of the unix socket or named pipe that will be created.
 // timeout = number of seconds before the socket/pipe times out waiting for a connection/re-cconnection - if -1 or 0 it never times out.
 //
-func StartServer(ipcName string, config *ServerConfig) (*Server, error) {
-
+func StartServer(ipcName string, config ServerConfig) (*Server, error) {
 	err := checkIpcName(ipcName)
 	if err != nil {
 		return nil, err
@@ -21,41 +32,21 @@ func StartServer(ipcName string, config *ServerConfig) (*Server, error) {
 	sc := &Server{
 		name:     ipcName,
 		status:   NotConnected,
-		recieved: make(chan *Message),
+		received: make(chan *Message),
 		toWrite:  make(chan *Message),
+		conf:     config,
 	}
 
-	if config == nil {
-		sc.timeout = 0
-		sc.maxMsgSize = maxMsgSize
-		sc.encryption = true
-		sc.unMask = false
+	if sc.conf.Timeout <= 0 {
+		sc.conf.Timeout = defaultServerConfig.Timeout
+	}
 
-	} else {
+	if sc.conf.MaxMsgSize < minMsgSize {
+		sc.conf.MaxMsgSize = defaultServerConfig.MaxMsgSize
+	}
 
-		if config.Timeout < 0 {
-			sc.timeout = 0
-		} else {
-			sc.timeout = config.Timeout
-		}
-
-		if config.MaxMsgSize < 1024 {
-			sc.maxMsgSize = maxMsgSize
-		} else {
-			sc.maxMsgSize = config.MaxMsgSize
-		}
-
-		if config.Encryption == false {
-			sc.encryption = false
-		} else {
-			sc.encryption = true
-		}
-
-		if config.UnmaskPermissions == true {
-			sc.unMask = true
-		} else {
-			sc.unMask = false
-		}
+	if sc.conf.SocketBasePath == "" {
+		sc.conf.SocketBasePath = defaultServerConfig.SocketBasePath
 	}
 
 	go startServer(sc)
@@ -67,7 +58,7 @@ func startServer(sc *Server) {
 
 	err := sc.run()
 	if err != nil {
-		sc.recieved <- &Message{err: err, MsgType: -2}
+		sc.received <- &Message{err: err, MsgType: -2}
 	}
 }
 
@@ -84,7 +75,7 @@ func (sc *Server) acceptLoop() {
 
 			err2 := sc.handshake()
 			if err2 != nil {
-				sc.recieved <- &Message{err: err2, MsgType: -2}
+				sc.received <- &Message{err: err2, MsgType: -2}
 				sc.status = Error
 				sc.listen.Close()
 				sc.conn.Close()
@@ -94,7 +85,7 @@ func (sc *Server) acceptLoop() {
 				go sc.write()
 
 				sc.status = Connected
-				sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+				sc.received <- &Message{Status: sc.status.String(), MsgType: -1}
 				sc.connChannel <- true
 			}
 
@@ -105,21 +96,15 @@ func (sc *Server) acceptLoop() {
 }
 
 func (sc *Server) connectionTimer() error {
-
-	if sc.timeout != 0 {
-
-		timeout := make(chan bool)
-
-		go func() {
-			time.Sleep(sc.timeout * time.Second)
-			timeout <- true
-		}()
+	if sc.conf.Timeout != 0 {
+		ticker := time.NewTicker(sc.conf.Timeout)
+		defer ticker.Stop()
 
 		select {
 
 		case <-sc.connChannel:
 			return nil
-		case <-timeout:
+		case <-ticker.C:
 			sc.listen.Close()
 			return errors.New("Timed out waiting for client to connect")
 		}
@@ -153,24 +138,24 @@ func (sc *Server) read() {
 			break
 		}
 
-		if sc.encryption == true {
+		if sc.conf.Encryption {
 			msgFinal, err := decrypt(*sc.enc.cipher, msgRecvd)
 			if err != nil {
-				sc.recieved <- &Message{err: err, MsgType: -2}
+				sc.received <- &Message{err: err, MsgType: -2}
 				continue
 			}
 
 			if bytesToInt(msgFinal[:4]) == 0 {
 				//  type 0 = control message
 			} else {
-				sc.recieved <- &Message{Data: msgFinal[4:], MsgType: bytesToInt(msgFinal[:4])}
+				sc.received <- &Message{Data: msgFinal[4:], MsgType: bytesToInt(msgFinal[:4])}
 			}
 
 		} else {
 			if bytesToInt(msgRecvd[:4]) == 0 {
 				//  type 0 = control message
 			} else {
-				sc.recieved <- &Message{Data: msgRecvd[4:], MsgType: bytesToInt(msgRecvd[:4])}
+				sc.received <- &Message{Data: msgRecvd[4:], MsgType: bytesToInt(msgRecvd[:4])}
 			}
 		}
 
@@ -185,8 +170,8 @@ func (sc *Server) readData(buff []byte) bool {
 		if sc.status == Closing {
 
 			sc.status = Closed
-			sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
-			sc.recieved <- &Message{err: errors.New("Server has closed the connection"), MsgType: -2}
+			sc.received <- &Message{Status: sc.status.String(), MsgType: -1}
+			sc.received <- &Message{err: errors.New("Server has closed the connection"), MsgType: -2}
 			return false
 		}
 
@@ -202,14 +187,14 @@ func (sc *Server) readData(buff []byte) bool {
 func (sc *Server) reConnect() {
 
 	sc.status = ReConnecting
-	sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+	sc.received <- &Message{Status: sc.status.String(), MsgType: -1}
 
 	err := sc.connectionTimer()
 	if err != nil {
 		sc.status = Timeout
-		sc.recieved <- &Message{Status: sc.status.String(), MsgType: -1}
+		sc.received <- &Message{Status: sc.status.String(), MsgType: -1}
 
-		sc.recieved <- &Message{err: err, MsgType: -2}
+		sc.received <- &Message{err: err, MsgType: -2}
 
 	}
 
@@ -219,13 +204,13 @@ func (sc *Server) reConnect() {
 
 func (sc *Server) Read() (*Message, error) {
 
-	m, ok := (<-sc.recieved)
+	m, ok := (<-sc.received)
 	if ok == false {
 		return nil, errors.New("the recieve channel has been closed")
 	}
 
 	if m.err != nil {
-		close(sc.recieved)
+		close(sc.received)
 		close(sc.toWrite)
 		return nil, m.err
 	}
@@ -245,7 +230,7 @@ func (sc *Server) Write(msgType int, message []byte) error {
 
 	mlen := len(message)
 
-	if mlen > sc.maxMsgSize {
+	if mlen > sc.conf.MaxMsgSize {
 		return errors.New("Message exceeds maximum message length")
 	}
 
@@ -275,7 +260,7 @@ func (sc *Server) write() {
 
 		writer := bufio.NewWriter(sc.conn)
 
-		if sc.encryption == true {
+		if sc.conf.Encryption {
 			toSend = append(toSend, m.Data...)
 			toSendEnc, err := encrypt(*sc.enc.cipher, toSend)
 			if err != nil {
