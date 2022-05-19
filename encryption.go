@@ -27,7 +27,7 @@ func (sc *Server) keyExchange() ([32]byte, error) {
 		return shared, err
 	}
 
-	// recieve clients public key
+	// receive clients public key
 	pubRecvd, err := recvPublic(sc.conn)
 	if err != nil {
 		return shared, err

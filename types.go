@@ -12,31 +12,28 @@ type Server struct {
 	listen      net.Listener
 	conn        net.Conn
 	status      Status
-	recieved    chan (*Message)
+	received    chan (*Message)
 	connChannel chan bool
 	toWrite     chan (*Message)
-	timeout     time.Duration
-	encryption  bool
-	maxMsgSize  int
 	enc         *encryption
+	conf        ServerConfig
 }
 
 // Client - holds the details of the client connection and config.
 type Client struct {
-	Name          string
-	conn          net.Conn
-	status        Status
-	timeout       float64       //
-	retryTimer    time.Duration // number of seconds before trying to connect again
-	recieved      chan (*Message)
-	toWrite       chan (*Message)
-	encryption    bool
-	encryptionReq bool
-	maxMsgSize    int
-	enc           *encryption
+	Name       string
+	conn       net.Conn
+	status     Status        //
+	retryTimer time.Duration // number of seconds before trying to connect again
+	received   chan (*Message)
+	toWrite    chan (*Message)
+	encryption bool
+	maxMsgSize int
+	enc        *encryption
+	conf       ClientConfig
 }
 
-// Message - contains the  recieved message
+// Message - contains the  received message
 type Message struct {
 	err     error  // details of any error
 	MsgType int    // type of message sent - 0 is reserved
@@ -69,18 +66,21 @@ const (
 	Timeout Status = iota
 )
 
-// ServerConfig - used to pass configuation overrides to ServerStart()
+// ServerConfig - used to pass configuration overrides to ServerStart()
 type ServerConfig struct {
-	Timeout    time.Duration
-	MaxMsgSize int
-	Encryption bool
+	Timeout           time.Duration
+	MaxMsgSize        int
+	Encryption        bool
+	UnmaskPermissions bool
+	SocketBasePath    string
 }
 
-// ClientConfig - used to pass configuation overrides to ClientStart()
+// ClientConfig - used to pass configuration overrides to ClientStart()
 type ClientConfig struct {
-	Timeout    float64
-	RetryTimer time.Duration
-	Encryption bool
+	Timeout            time.Duration
+	RetryTimer         time.Duration
+	EncryptionRequired bool
+	SocketBasePath     string
 }
 
 // Encryption - encryption settings

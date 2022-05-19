@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"strings"
-	"time"
 )
 
 // StartClient - start the ipc client.
@@ -13,8 +12,7 @@ import (
 // timeout = number of seconds before the socket/pipe times out trying to connect/re-cconnect - if -1 or 0 it never times out.
 // retryTimer = number of seconds before the client tries to connect again.
 //
-func StartClient(ipcName string, config *ClientConfig) (*Client, error) {
-
+func StartClient(ipcName string, config ClientConfig) (*Client, error) {
 	err := checkIpcName(ipcName)
 	if err != nil {
 		return nil, err
@@ -24,35 +22,21 @@ func StartClient(ipcName string, config *ClientConfig) (*Client, error) {
 	cc := &Client{
 		Name:     ipcName,
 		status:   NotConnected,
-		recieved: make(chan *Message),
+		received: make(chan *Message),
 		toWrite:  make(chan *Message),
+		conf:     config,
 	}
 
-	if config == nil {
+	if cc.conf.Timeout < 0 {
+		cc.conf.Timeout = defaultClientConfig.Timeout
+	}
 
-		cc.timeout = 0
-		cc.retryTimer = time.Duration(1)
-		cc.encryptionReq = true
+	if cc.conf.SocketBasePath == "" {
+		cc.conf.SocketBasePath = defaultClientConfig.SocketBasePath
+	}
 
-	} else {
-
-		if config.Timeout < 0 {
-			cc.timeout = 0
-		} else {
-			cc.timeout = config.Timeout
-		}
-
-		if config.RetryTimer < 1 {
-			cc.retryTimer = time.Duration(1)
-		} else {
-			cc.retryTimer = time.Duration(config.RetryTimer)
-		}
-
-		if config.Encryption == false {
-			cc.encryptionReq = false
-		} else {
-			cc.encryptionReq = true // defualt is to always enforce encryption
-		}
+	if cc.conf.RetryTimer <= 0 {
+		cc.conf.RetryTimer = defaultClientConfig.RetryTimer
 	}
 
 	go startClient(cc)
@@ -64,16 +48,16 @@ func StartClient(ipcName string, config *ClientConfig) (*Client, error) {
 func startClient(cc *Client) {
 
 	cc.status = Connecting
-	cc.recieved <- &Message{Status: cc.status.String(), MsgType: -1}
+	cc.received <- &Message{Status: cc.status.String(), MsgType: -1}
 
 	err := cc.dial()
 	if err != nil {
-		cc.recieved <- &Message{err: err, MsgType: -2}
+		cc.received <- &Message{err: err, MsgType: -2}
 		return
 	}
 
 	cc.status = Connected
-	cc.recieved <- &Message{Status: cc.status.String(), MsgType: -1}
+	cc.received <- &Message{Status: cc.status.String(), MsgType: -1}
 
 	go cc.read()
 	go cc.write()
@@ -108,7 +92,7 @@ func (cc *Client) read() {
 			if bytesToInt(msgFinal[:4]) == 0 {
 				//  type 0 = control message
 			} else {
-				cc.recieved <- &Message{Data: msgFinal[4:], MsgType: bytesToInt(msgFinal[:4])}
+				cc.received <- &Message{Data: msgFinal[4:], MsgType: bytesToInt(msgFinal[:4])}
 			}
 
 		} else {
@@ -116,7 +100,7 @@ func (cc *Client) read() {
 			if bytesToInt(msgRecvd[:4]) == 0 {
 				//  type 0 = control message
 			} else {
-				cc.recieved <- &Message{Data: msgRecvd[4:], MsgType: bytesToInt(msgRecvd[:4])}
+				cc.received <- &Message{Data: msgRecvd[4:], MsgType: bytesToInt(msgRecvd[:4])}
 			}
 		}
 	}
@@ -137,8 +121,8 @@ func (cc *Client) readData(buff []byte) bool {
 
 		if cc.status == Closing {
 			cc.status = Closed
-			cc.recieved <- &Message{Status: cc.status.String(), MsgType: -1}
-			cc.recieved <- &Message{err: errors.New("Client has closed the connection"), MsgType: -2}
+			cc.received <- &Message{Status: cc.status.String(), MsgType: -1}
+			cc.received <- &Message{err: errors.New("Client has closed the connection"), MsgType: -2}
 			return false
 		}
 
@@ -154,21 +138,21 @@ func (cc *Client) readData(buff []byte) bool {
 func (cc *Client) reconnect() {
 
 	cc.status = ReConnecting
-	cc.recieved <- &Message{Status: cc.status.String(), MsgType: -1}
+	cc.received <- &Message{Status: cc.status.String(), MsgType: -1}
 
 	err := cc.dial() // connect to the pipe
 	if err != nil {
 		if err.Error() == "Timed out trying to connect" {
 			cc.status = Timeout
-			cc.recieved <- &Message{Status: cc.status.String(), MsgType: -1}
-			cc.recieved <- &Message{err: errors.New("Timed out trying to re-connect"), MsgType: -2}
+			cc.received <- &Message{Status: cc.status.String(), MsgType: -1}
+			cc.received <- &Message{err: errors.New("Timed out trying to re-connect"), MsgType: -2}
 		}
 
 		return
 	}
 
 	cc.status = Connected
-	cc.recieved <- &Message{Status: cc.status.String(), MsgType: -1}
+	cc.received <- &Message{Status: cc.status.String(), MsgType: -1}
 
 	go cc.read()
 
@@ -179,13 +163,13 @@ func (cc *Client) reconnect() {
 //
 func (cc *Client) Read() (*Message, error) {
 
-	m, ok := (<-cc.recieved)
+	m, ok := (<-cc.received)
 	if ok == false {
 		return nil, errors.New("the recieve channel has been closed")
 	}
 
 	if m.err != nil {
-		close(cc.recieved)
+		close(cc.received)
 		close(cc.toWrite)
 		return nil, m.err
 	}

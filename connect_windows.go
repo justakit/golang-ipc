@@ -1,3 +1,6 @@
+//go:build windows
+// +build windows
+
 package ipc
 
 import (
@@ -47,12 +50,13 @@ func (cc *Client) dial() error {
 	startTime := time.Now()
 
 	for {
-		if cc.timeout != 0 {
-			if time.Now().Sub(startTime).Seconds() > cc.timeout {
+		if cc.conf.Timeout != 0 {
+			if time.Now().After(startTime.Add(cc.conf.Timeout)) {
 				cc.status = Closed
 				return errors.New("Timed out trying to connect")
 			}
 		}
+
 		pn, err := winio.DialPipe(pipeBase+cc.Name, nil)
 		if err != nil {
 
