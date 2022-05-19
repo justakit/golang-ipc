@@ -4,4 +4,4 @@ go 1.18
 
 require github.com/Microsoft/go-winio v0.5.2
 
-require golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
+require golang.org/x/sys v0.0.0-20220517195934-5e4e11fc645e // indirect
