@@ -23,8 +23,7 @@ type Server struct {
 type Client struct {
 	Name       string
 	conn       net.Conn
-	status     Status        //
-	retryTimer time.Duration // number of seconds before trying to connect again
+	status     Status
 	received   chan (*Message)
 	toWrite    chan (*Message)
 	encryption bool
