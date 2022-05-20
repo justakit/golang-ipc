@@ -77,7 +77,7 @@ func (cc *Client) dial() error {
 			return nil
 		}
 
-		time.Sleep(cc.retryTimer * time.Second)
+		time.Sleep(cc.conf.RetryTimer * time.Second)
 
 	}
 }
