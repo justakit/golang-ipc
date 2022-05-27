@@ -303,11 +303,21 @@ func (sc *Server) Status() string {
 
 // Close - closes the connection
 func (sc *Server) Close() {
-
 	sc.status = Closing
-	sc.listen.Close()
-	sc.conn.Close()
 
-	close(sc.received)
-	close(sc.toWrite)
+	if sc.listen != nil {
+		sc.listen.Close()
+	}
+
+	if sc.conn != nil {
+		sc.conn.Close()
+	}
+
+	if sc.received != nil {
+		close(sc.received)
+	}
+
+	if sc.toWrite != nil {
+		close(sc.toWrite)
+	}
 }
