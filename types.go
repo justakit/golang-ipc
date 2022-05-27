@@ -36,7 +36,7 @@ type Client struct {
 type Message struct {
 	err     error  // details of any error
 	MsgType int    // type of message sent - 0 is reserved
-	Data    []byte // message data recieved
+	Data    []byte // message data received
 	Status  string
 }
 
