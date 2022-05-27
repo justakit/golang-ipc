@@ -164,7 +164,6 @@ func (sc *Server) readData(buff []byte) bool {
 
 	_, err := sc.conn.Read(buff)
 	if err != nil {
-
 		if sc.status == Closing {
 
 			sc.status = Closed
@@ -198,18 +197,16 @@ func (sc *Server) reConnect() {
 
 }
 
-// Read - blocking function that waits until an non multipart message is recieved
+// Read - blocking function that waits until an non multipart message is received
 
 func (sc *Server) Read() (*Message, error) {
 
 	m, ok := (<-sc.received)
 	if ok == false {
-		return nil, errors.New("the recieve channel has been closed")
+		return nil, errors.New("the receive channel has been closed")
 	}
 
 	if m.err != nil {
-		close(sc.received)
-		close(sc.toWrite)
 		return nil, m.err
 	}
 
@@ -306,9 +303,21 @@ func (sc *Server) Status() string {
 
 // Close - closes the connection
 func (sc *Server) Close() {
-
 	sc.status = Closing
-	sc.listen.Close()
-	sc.conn.Close()
 
+	if sc.listen != nil {
+		sc.listen.Close()
+	}
+
+	if sc.conn != nil {
+		sc.conn.Close()
+	}
+
+	if sc.received != nil {
+		close(sc.received)
+	}
+
+	if sc.toWrite != nil {
+		close(sc.toWrite)
+	}
 }

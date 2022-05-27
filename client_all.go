@@ -158,14 +158,14 @@ func (cc *Client) reconnect() {
 
 }
 
-// Read - blocking function that waits until an non multipart message is recieved
+// Read - blocking function that waits until an non multipart message is received
 // returns the message type, data and any error.
 //
 func (cc *Client) Read() (*Message, error) {
 
 	m, ok := (<-cc.received)
 	if ok == false {
-		return nil, errors.New("the recieve channel has been closed")
+		return nil, errors.New("the receive channel has been closed")
 	}
 
 	if m.err != nil {
