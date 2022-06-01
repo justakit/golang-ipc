@@ -165,10 +165,7 @@ func (sc *Server) readData(buff []byte) bool {
 	_, err := sc.conn.Read(buff)
 	if err != nil {
 		if sc.status == Closing {
-
 			sc.status = Closed
-			sc.received <- &Message{Status: sc.status.String(), MsgType: -1}
-			sc.received <- &Message{err: errors.New("Server has closed the connection"), MsgType: -2}
 			return false
 		}
 
@@ -314,6 +311,9 @@ func (sc *Server) Close() {
 	}
 
 	if sc.received != nil {
+		sc.received <- &Message{Status: sc.status.String(), MsgType: -1}
+		sc.received <- &Message{err: errors.New("Server has closed the connection"), MsgType: -2}
+
 		close(sc.received)
 	}
 
