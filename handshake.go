@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 // 1st message sent from the server
@@ -46,13 +47,13 @@ func (sc *Server) one() error {
 
 	_, err := sc.conn.Write(buff)
 	if err != nil {
-		return errors.New("unable to send handshake ")
+		return fmt.Errorf("unable to send handshake: %w", err)
 	}
 
 	recv := make([]byte, 1)
 	_, err = sc.conn.Read(recv)
 	if err != nil {
-		return errors.New("failed to receive handshake reply")
+		return fmt.Errorf("failed to receive handshake reply: %w", err)
 	}
 
 	switch result := recv[0]; result {
@@ -117,14 +118,14 @@ func (sc *Server) msgLength() error {
 
 	_, err := sc.conn.Write(toSend)
 	if err != nil {
-		return errors.New("unable to send max message length ")
+		return fmt.Errorf("unable to send max message length: %w", err)
 	}
 
 	reply := make([]byte, 1)
 
 	_, err = sc.conn.Read(reply)
 	if err != nil {
-		return errors.New("did not receive message length reply")
+		return fmt.Errorf("did not receive message length reply: %w", err)
 	}
 
 	return nil
@@ -160,7 +161,7 @@ func (cc *Client) one() error {
 	recv := make([]byte, 2)
 	_, err := cc.conn.Read(recv)
 	if err != nil {
-		return errors.New("failed to receive handshake message")
+		return fmt.Errorf("failed to receive handshake message: %w", err)
 	}
 
 	if recv[0] != version {
@@ -212,7 +213,7 @@ func (cc *Client) msgLength() error {
 
 	_, err := cc.conn.Read(buff)
 	if err != nil {
-		return errors.New("failed to receive max message length 1")
+		return fmt.Errorf("failed to receive max message length 1: %w", err)
 	}
 
 	var msgLen uint32
@@ -222,13 +223,13 @@ func (cc *Client) msgLength() error {
 
 	_, err = cc.conn.Read(buff)
 	if err != nil {
-		return errors.New("failed to receive max message length 2")
+		return fmt.Errorf("failed to receive max message length 2: %w", err)
 	}
 	var buff2 []byte
 	if cc.encryption == true {
 		buff2, err = decrypt(*cc.enc.cipher, buff)
 		if err != nil {
-			return errors.New("failed to receive max message length 3")
+			return fmt.Errorf("failed to receive max message length 3: %w", err)
 		}
 
 	} else {
