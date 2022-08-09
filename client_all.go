@@ -261,7 +261,9 @@ func (cc *Client) Status() string {
 
 // Close - closes the connection
 func (cc *Client) Close() {
-
 	cc.status = Closing
-	cc.conn.Close()
+
+	if cc.conn != nil {
+		cc.conn.Close()
+	}
 }

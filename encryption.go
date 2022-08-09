@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 )
@@ -95,7 +96,7 @@ func sendPublic(conn net.Conn, pub *ecdsa.PublicKey) error {
 
 	_, err := conn.Write(pubSend)
 	if err != nil {
-		return errors.New("could not sent public key")
+		return fmt.Errorf("could not sent public key: %w", err)
 	}
 
 	return nil
@@ -106,7 +107,7 @@ func recvPublic(conn net.Conn) (*ecdsa.PublicKey, error) {
 	buff := make([]byte, 300)
 	i, err := conn.Read(buff)
 	if err != nil {
-		return nil, errors.New("didn't receive public key")
+		return nil, fmt.Errorf("didn't receive public key: %w", err)
 	}
 
 	if i != 97 {

@@ -73,11 +73,7 @@ func (sc *Server) acceptLoop() {
 
 			err2 := sc.handshake()
 			if err2 != nil {
-				sc.received <- &Message{err: err2, MsgType: -2}
-				sc.status = Error
-				sc.listen.Close()
 				sc.conn.Close()
-
 			} else {
 				go sc.read()
 				go sc.write()
@@ -311,9 +307,6 @@ func (sc *Server) Close() {
 	}
 
 	if sc.received != nil {
-		sc.received <- &Message{Status: sc.status.String(), MsgType: -1}
-		sc.received <- &Message{err: errors.New("Server has closed the connection"), MsgType: -2}
-
 		close(sc.received)
 	}
 
